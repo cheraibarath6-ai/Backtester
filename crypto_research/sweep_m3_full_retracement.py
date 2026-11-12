@@ -15,12 +15,12 @@ from .sweep_m3_strong_misjudge import prepare, wilder
 
 SYMBOLS=("BTCUSDT","ETHUSDT")
 TIMEFRAMES=("5m","15m","30m","1h")
-RETRACEMENTS=(.70,.725,.75,.77,.786,.80,.81,.82,.83,.85,.875,.90)
-ATR_PERIODS=(20,)
-IMPULSE_ATR=(2.4,2.5)
-ADX_BANDS=((18,30),)
-RSI_MODES=("exact","none")
-RRS=(2.,3.,4.)
+RETRACEMENTS=(.75,.786,.80,.82,.85)
+ATR_PERIODS=(14,20,25)
+IMPULSE_ATR=(1.8,2.0,2.2,2.4,2.5,2.7)
+ADX_BANDS=((18,30),(15,25),(20,35))
+RSI_MODES=("exact","loose","none")
+RRS=(2.,3.,4.,5.,6.)
 PENDING_BARS=(3,6,10)
 START="2021-01-01"; END="2026-11-01"
 CUTS=(("TRAIN_2021_2023","2021-01-01","2024-01-01"),
@@ -130,12 +130,12 @@ def main():
       for tf in TIMEFRAMES:
        for ap in ATR_PERIODS:
         prep[s,tf,ap]=prepare(raw[s],tf,ap)
-    # Core parameter grid without RR: 3*6*3*3*12*4*2 = 15,552 setups.
+    # Core parameter grid without RR: 4*3*6*3*3*5*5 = 16,200 unique setups per asset. Pending expiry is an additional 3-way test dimension.
     # Each setup is evaluated at all five RR values and all chronological samples.
     summaries=[]; trade_parts=[]
     configs=list(product(TIMEFRAMES,ATR_PERIODS,IMPULSE_ATR,ADX_BANDS,RSI_MODES,RETRACEMENTS))
     total=len(configs)*len(RRS)*len(PENDING_BARS)*len(SYMBOLS)
-    print(f"CONFIGS={len(configs)} ASSET_TESTS={total} PERIODS={len(CUTS)}")
+    print(f"CONFIGS={len(configs)} ASSET_TESTS={len(configs)*len(RRS)*len(PENDING_BARS)*len(SYMBOLS)} PERIODS={len(CUTS)}")
     n=0
     for tf,ap,mult,(alo,ahi),mode,ret in configs:
       model=f"M3_{tf}_A{ap}_I{mult}_ADX{alo}-{ahi}_RSI{mode}_RET{ret:.3f}"
