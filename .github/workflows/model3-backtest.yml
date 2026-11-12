@@ -1,0 +1,43 @@
+name: Model 3 Full Retracement Backtest
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+concurrency:
+  group: model3-full-retracement
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Cache public Binance historical archives
+        uses: actions/cache@v4
+        with:
+          path: data/raw
+          key: model3-binance-um-2021-2026-v1-${{ runner.os }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Compile research code
+        run: python -m compileall -q crypto_research
+      - name: Run Model 3 parameter sweep
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: python -u -m crypto_research.sweep_m3_full_retracement
+      - name: Upload all outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model3-full-retracement-results
+          path: artifacts/model3_full_retracement/
+          if-no-files-found: warn
+          retention-days: 90
