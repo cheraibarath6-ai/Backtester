@@ -9,7 +9,7 @@ on:
       - "requirements.txt"
 concurrency:
   group: model3-full-retracement
-  cancel-in-progress: false
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
