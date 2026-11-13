@@ -1,6 +1,7 @@
 from pathlib import Path
 import json
 import pandas as pd
+import shutil
 from .sweep_m3_full_retracement import CUTS
 def main():
     root=Path("artifacts/shards")
@@ -21,10 +22,12 @@ def main():
     if set(sm.group_id.unique())!=set(range(6480)):
         raise RuntimeError("Missing group IDs")
     out=Path("artifacts/model3_full_retracement"); out.mkdir(parents=True,exist_ok=True)
+    quality=Path("artifacts/preflight/data_quality.json")
+    if quality.exists(): shutil.copy2(quality,out/"data_quality.json")
     sm.to_csv(out/"all_configuration_metrics.csv",index=False)
     if trade_files:
         pd.concat([pd.read_csv(p) for p in trade_files],ignore_index=True).to_csv(out/"all_trades.csv",index=False)
-    fwd=sm[sm.sample.isin(["OOS_2024","OOS_2025","OOS_2026_YTD"])].copy()
+    fwd=sm[sm["sample"].isin(["OOS_2024","OOS_2025","OOS_2026_YTD"])].copy()
     keys=["model","symbol","timeframe","atr_period","impulse_atr","adx_min","adx_max","rsi_mode","retracement","rr","pending_bars"]
     agg=fwd.groupby(keys,dropna=False).agg(trades=("trades","sum"),net_bps=("net_bps","sum"),
       win_rate_pct=("win_rate_pct","mean"),pf=("profit_factor","mean"),
