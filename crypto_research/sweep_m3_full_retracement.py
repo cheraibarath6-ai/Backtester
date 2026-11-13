@@ -89,7 +89,11 @@ def run_limit_bt(d, funding, sig, retrace, rr, symbol, tf, model, sample_start, 
             else:
                 touched=(l[i]<=level) if s==1 else (h[i]>=level)
                 invalid=(o[i]<=st) if s==1 else (o[i]>=st)
-                if touched and not invalid:
+                # Once price gaps through the structural stop, the setup is invalid;
+                # do not leave a stale limit order live for a later accidental fill.
+                if invalid:
+                    pending=None
+                elif touched:
                     raw=min(o[i],level) if s==1 else max(o[i],level)
                     fill=raw*(1+s*SLIP/10000); r=abs(fill-st)
                     if r>0 and ((s==1 and st<fill) or (s==-1 and st>fill)):
