@@ -72,10 +72,14 @@ def acquire_klines(symbol,start,end,root=Path("data")):
         p=get_zip(url,root/"raw"/"klines_daily"/symbol/name)
         if p:
             daily_parts.append(read_zip(p))
+    attempted_days=len(missing_days)
+    loaded_days=len(daily_parts)
     if daily_parts:
         d=pd.concat([d,*daily_parts]).sort_index()
         d=d[~d.index.duplicated(keep="last")]
         d=d.loc[(d.index>=pd.Timestamp(start,tz="UTC"))&(d.index<pd.Timestamp(end,tz="UTC"))]
+    d.attrs["daily_backfill_days_attempted"]=attempted_days
+    d.attrs["daily_backfill_days_loaded"]=loaded_days
     return d
 
 def read_funding_zip(path: Path):
