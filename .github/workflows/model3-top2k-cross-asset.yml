@@ -1,0 +1,115 @@
+name: Model 3 Top-2000 Cross-Asset Transfer
+
+on:
+  push:
+    branches: [research/model3-top2000-cross-asset]
+    paths:
+      - '.github/workflows/model3-top2k-cross-asset.yml'
+      - 'crypto_research/model3_top2k_transfer.py'
+      - 'crypto_research/prepare_model3_top2k_pool.py'
+      - 'crypto_research/test_top2k_transfer.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: model3-top2k-cross-asset
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - name: Download the recovered full Model 3 ranking artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: model3-full-retracement-pf-ranking
+          run-id: 43580625697
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: source-ranking
+      - name: Build exact top-2,000 candidate pool and frozen BTC baseline
+        run: |
+          python -m crypto_research.prepare_model3_top2k_pool --source source-ranking/all_eligible_ranked_by_pf.csv --out crypto_research/configs
+          python -m json.tool crypto_research/configs/model3_btc_frozen_baseline_46.json >/dev/null
+      - name: Upload candidate pool and frozen BTC baseline
+        uses: actions/upload-artifact@v4
+        with:
+          name: model3-top2k-candidate-pool
+          path: crypto_research/configs/
+          retention-days: 90
+
+  screen:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        symbol: [BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT, XRPUSDT, DOGEUSDT, ADAUSDT, LINKUSDT, LTCUSDT, AVAXUSDT]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt numba pytest
+      - name: Download exact top-2,000 pool and BTC baseline
+        uses: actions/download-artifact@v4
+        with:
+          name: model3-top2k-candidate-pool
+          path: crypto_research/configs
+      - name: Compile and test backtest kernel
+        run: |
+          python -m compileall -q crypto_research
+          python -m pytest -q crypto_research/test_top2k_transfer.py
+      - name: Replay all 1,853 unique candidates for this asset
+        run: python -m crypto_research.model3_top2k_transfer --symbol '${{ matrix.symbol }}' --out 'asset-results/${{ matrix.symbol }}'
+      - name: Upload per-asset results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model3-top2k-asset-${{ matrix.symbol }}
+          path: asset-results/${{ matrix.symbol }}/
+          if-no-files-found: warn
+          retention-days: 90
+
+  aggregate:
+    needs: [prepare, screen]
+    if: always() && needs.prepare.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt numba
+      - name: Download frozen pool and BTC baseline
+        uses: actions/download-artifact@v4
+        with:
+          name: model3-top2k-candidate-pool
+          path: crypto_research/configs
+      - name: Download available asset result artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: model3-top2k-asset-*
+          path: input-artifacts
+          merge-multiple: false
+      - name: Aggregate and verify ten-asset completeness
+        run: python -m crypto_research.model3_top2k_transfer --aggregate --input input-artifacts --out final-report
+      - name: Upload consolidated report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model3-top2k-ten-asset-final-report
+          path: final-report/
+          if-no-files-found: warn
+          retention-days: 90
