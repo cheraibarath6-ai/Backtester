@@ -15,3 +15,32 @@ def test_numba_stop_first_same_bar():
 def test_summary_pf():
     x=stats(np.array([100.,-50.,25.]),np.array([1,-1,1],dtype=np.int8),np.array([2,1,2],dtype=np.int8))
     assert x['trades']==3 and x['profit_factor']==2.5 and x['long_trades']==2
+
+def test_stats_reports_net_winner_and_loser_bps():
+    x=stats(np.array([100.,-50.,25.]),np.array([1,-1,1],dtype=np.int8),np.array([2,1,2],dtype=np.int8))
+    assert x['net_winning_bps']==125.
+    assert x['net_losing_bps']==50.
+    assert x['net_bps']==75.
+
+
+def test_official_funding_quality_accepts_complete_eight_hour_series():
+    from crypto_research.model3_top2k_transfer import funding_quality
+    ix=pd.date_range('2024-01-01',periods=4,freq='8h',tz='UTC')
+    f=pd.DataFrame({'funding_rate':[.0001]*4,'funding_interval_hours':[8]*4},index=ix)
+    f.attrs['source']='binance_vision_official_monthly_fundingRate'
+    q=funding_quality(f,'BTCUSDT')
+    assert q['source'].startswith('binance_vision_official')
+    assert q['suspicious_gap_count']==0
+    assert q['coverage_pct']==100.
+
+
+def test_official_funding_quality_flags_missing_settlement():
+    from crypto_research.model3_top2k_transfer import funding_quality
+    ix=pd.DatetimeIndex([pd.Timestamp('2024-01-01',tz='UTC'),
+                         pd.Timestamp('2024-01-02',tz='UTC'),
+                         pd.Timestamp('2024-01-03',tz='UTC')])
+    f=pd.DataFrame({'funding_rate':[.0001]*3,'funding_interval_hours':[8]*3},index=ix)
+    f.attrs['source']='binance_vision_official_monthly_fundingRate'
+    q=funding_quality(f,'BTCUSDT')
+    assert q['suspicious_gap_count']==2
+    assert q['coverage_pct']<100.
