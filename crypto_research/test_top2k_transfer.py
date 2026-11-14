@@ -38,7 +38,7 @@ def test_official_funding_quality_flags_missing_settlement():
     from crypto_research.model3_top2k_transfer import funding_quality
     ix=pd.DatetimeIndex([pd.Timestamp('2024-01-01',tz='UTC'),
                          pd.Timestamp('2024-01-02',tz='UTC'),
-                         pd.Timestamp('2024-01-03',tz='UTC')])
+                         pd.Timestamp('2024-01-02 08:00:00',tz='UTC')])
     f=pd.DataFrame({'funding_rate':[.0001]*3,'funding_interval_hours':[8]*3},index=ix)
     f.attrs['source']='binance_vision_official_monthly_fundingRate'
     q=funding_quality(f,'BTCUSDT')
