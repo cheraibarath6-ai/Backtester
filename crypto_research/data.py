@@ -52,7 +52,31 @@ def acquire_klines(symbol,start,end,root=Path("data")):
     if not parts: raise RuntimeError(f"No monthly kline archives found for {symbol}")
     d=pd.concat(parts).sort_index()
     d=d[~d.index.duplicated(keep="last")]
-    return d.loc[(d.index>=pd.Timestamp(start,tz="UTC"))&(d.index<pd.Timestamp(end,tz="UTC"))]
+    d=d.loc[(d.index>=pd.Timestamp(start,tz="UTC"))&(d.index<pd.Timestamp(end,tz="UTC"))]
+
+    # Monthly Binance Vision archives can contain isolated missing days. Backfill
+    # only the affected UTC days from Binance's official daily kline archives.
+    # Never synthesize candles or interpolate missing OHLCV.
+    gaps=d.index.to_series().diff().dropna()
+    missing_days=set()
+    for gap_end, delta in gaps[gaps>pd.Timedelta(minutes=1)].items():
+        first_missing=gap_end-delta+pd.Timedelta(minutes=1)
+        last_missing=gap_end-pd.Timedelta(minutes=1)
+        for day in pd.date_range(first_missing.normalize(),last_missing.normalize(),freq="D"):
+            missing_days.add(day)
+    daily_parts=[]
+    for day in sorted(missing_days):
+        day_key=day.strftime("%Y-%m-%d")
+        name=f"{symbol}-1m-{day_key}.zip"
+        url=f"https://data.binance.vision/data/futures/um/daily/klines/{symbol}/1m/{name}"
+        p=get_zip(url,root/"raw"/"klines_daily"/symbol/name)
+        if p:
+            daily_parts.append(read_zip(p))
+    if daily_parts:
+        d=pd.concat([d,*daily_parts]).sort_index()
+        d=d[~d.index.duplicated(keep="last")]
+        d=d.loc[(d.index>=pd.Timestamp(start,tz="UTC"))&(d.index<pd.Timestamp(end,tz="UTC"))]
+    return d
 
 def read_funding_zip(path: Path):
     with zipfile.ZipFile(path) as z:
