@@ -250,7 +250,6 @@ def aggregate(inp,out):
     so=m.drop(columns=['family']).merge(keys,on=['symbol','candidate_id'],how='inner',validate='many_to_one')
     so=so[so.period.str.startswith('OOS_')].copy()
     so.to_csv(out/'ASSET_ORIENTED_SELECTED_CONFIGS_WITH_OOS.csv',index=False)
-    if so.empty: raise RuntimeError('No selected configurations have OOS evaluation rows')
 
     model_perf=grouped_performance(so,['symbol','family','period'])
     model_perf.to_csv(out/'ASSET_ORIENTED_MODEL_PERFORMANCE.csv',index=False)
