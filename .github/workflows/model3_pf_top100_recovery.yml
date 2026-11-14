@@ -1,0 +1,48 @@
+name: Model 3 full-sweep PF recovery
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/model3-pf-top100-recovery
+    paths:
+      - crypto_research/aggregate_model3_shards_streaming.py
+      - .github/workflows/model3_pf_top100_recovery.yml
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  aggregate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout recovery branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install aggregation dependencies
+        run: python -m pip install --upgrade pip pandas numpy requests
+
+      - name: Recover all 102 shards and rank every RR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python crypto_research/aggregate_model3_shards_streaming.py \
+            --repo "${{ github.repository }}" \
+            --run-id 43358380546 \
+            --token "$GITHUB_TOKEN"
+
+      - name: Upload verified PF ranking and audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: model3-full-retracement-pf-ranking
+          path: artifacts/model3_full_retracement_pf/
+          if-no-files-found: error
+          retention-days: 90
