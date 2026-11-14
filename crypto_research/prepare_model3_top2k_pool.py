@@ -49,8 +49,23 @@ def build_pool(source_csv,outdir):
         baseline[r.family].append(item)
     counts={k:len(v) for k,v in baseline.items()}
     if counts!={'3A':21,'3B':8,'3C':17}: raise RuntimeError(f'Frozen BTC baseline mismatch: {counts}')
+    def param_key(r):
+        return (str(r['timeframe']),int(r['atr_period']),round(float(r['impulse_atr']),8),
+                int(r['adx_min']),int(r['adx_max']),str(r['rsi_mode']),
+                round(float(r['retracement']),8),round(float(r['rr']),8),int(r['pending_bars']))
+    pool_ids={param_key(r):str(r['candidate_id']) for _,r in pool.iterrows()}
+    baseline_ids=[]
+    for fam,arr in baseline.items():
+        for item in arr:
+            key=param_key(item)
+            if key not in pool_ids:
+                raise RuntimeError(f'Frozen BTC baseline config missing from top-2,000 pool: {key}')
+            item['candidate_id']=pool_ids[key]
+            baseline_ids.append(pool_ids[key])
+    if len(set(baseline_ids))!=46:
+        raise RuntimeError(f'Frozen BTC baseline candidate IDs are not unique: {len(set(baseline_ids))}')
     (out/'model3_btc_frozen_baseline_46.json').write_text(json.dumps(baseline,indent=2))
-    manifest={'source_rows':2000,'unique_parameter_sets':len(pool),'source_symbols':sorted(d.symbol.unique().tolist()),'candidate_family_counts':pool.candidate_family.value_counts().to_dict(),'frozen_btc_baseline_counts':counts,'rank_source':'all_eligible_ranked_by_pf.csv','rank_window':'2024-2026 YTD OOS on BTC/ETH'}
+    manifest={'source_rows':2000,'unique_parameter_sets':len(pool),'source_symbols':sorted(d.symbol.unique().tolist()),'candidate_family_counts':pool.candidate_family.value_counts().to_dict(),'frozen_btc_baseline_counts':counts,'frozen_btc_baseline_candidate_ids':baseline_ids,'rank_source':'all_eligible_ranked_by_pf.csv','rank_window':'2024-2026 YTD OOS on BTC/ETH'}
     (out/'top2k_pool_manifest.json').write_text(json.dumps(manifest,indent=2))
     print(json.dumps(manifest,indent=2))
 
