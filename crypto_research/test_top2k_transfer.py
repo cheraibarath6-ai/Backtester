@@ -42,5 +42,6 @@ def test_official_funding_quality_flags_missing_settlement():
     f=pd.DataFrame({'funding_rate':[.0001]*3,'funding_interval_hours':[8]*3},index=ix)
     f.attrs['source']='binance_vision_official_monthly_fundingRate'
     q=funding_quality(f,'BTCUSDT')
-    assert q['suspicious_gap_count']==2
+    assert q['suspicious_gap_count']==1
+    assert q['estimated_missing_events']==2
     assert q['coverage_pct']<100.
