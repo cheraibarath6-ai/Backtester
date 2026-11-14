@@ -6,9 +6,16 @@ on:
     paths:
       - '.github/workflows/model3-top2k-cross-asset.yml'
       - 'crypto_research/model3_top2k_transfer.py'
+      - 'crypto_research/data.py'
       - 'crypto_research/prepare_model3_top2k_pool.py'
       - 'crypto_research/test_top2k_transfer.py'
   workflow_dispatch:
+    inputs:
+      symbols:
+        description: JSON array of asset symbols to replay
+        required: false
+        type: string
+        default: '["SOLUSDT","BTCUSDT","XRPUSDT","ADAUSDT","BNBUSDT","LINKUSDT","ETHUSDT","DOGEUSDT"]'
 
 permissions:
   contents: read
@@ -54,7 +61,7 @@ jobs:
       fail-fast: false
       max-parallel: 2
       matrix:
-        symbol: [BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT, XRPUSDT, DOGEUSDT, ADAUSDT, LINKUSDT, LTCUSDT, AVAXUSDT]
+        symbol: \${{ fromJSON(github.event.inputs.symbols || '["SOLUSDT","BTCUSDT","XRPUSDT","ADAUSDT","BNBUSDT","LINKUSDT","ETHUSDT","DOGEUSDT"]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -103,6 +110,22 @@ jobs:
           pattern: model3-top2k-asset-*
           path: input-artifacts
           merge-multiple: false
+      - name: Reuse original-run results for assets not re-run
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: model3-top2k-asset-LTCUSDT
+          run-id: 43619780918
+          github-token: \${{ secrets.GITHUB_TOKEN }}
+          path: input-artifacts/original-LTCUSDT
+      - name: Reuse original-run results for AVAX if complete
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: model3-top2k-asset-AVAXUSDT
+          run-id: 43619780918
+          github-token: \${{ secrets.GITHUB_TOKEN }}
+          path: input-artifacts/original-AVAXUSDT
       - name: Aggregate and verify ten-asset completeness
         run: python -m crypto_research.model3_top2k_transfer --aggregate --input input-artifacts --out final-report
       - name: Upload consolidated report
