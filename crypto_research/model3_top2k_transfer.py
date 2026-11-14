@@ -46,7 +46,16 @@ def funding_quality(funding,symbol):
 def candle_quality(raw,symbol):
     idx=raw.index.sort_values(); gaps=idx.to_series().diff().dropna(); expected=int((idx[-1]-idx[0]).total_seconds()/60)+1
     missing=expected-len(idx); max_gap=float(gaps.max().total_seconds()/60) if len(gaps) else 0.
-    return {'symbol':symbol,'rows':len(raw),'actual_start':str(idx[0]),'actual_end':str(idx[-1]),'missing_minutes':int(missing),'coverage_pct':100*len(raw)/expected,'max_gap_minutes':max_gap}
+    intervals=[]
+    for gap_end,delta in gaps[gaps>pd.Timedelta(minutes=1)].items():
+        intervals.append({'first_missing':str(gap_end-delta+pd.Timedelta(minutes=1)),
+                          'last_missing':str(gap_end-pd.Timedelta(minutes=1)),
+                          'missing_minutes':int(delta.total_seconds()/60)-1})
+    return {'symbol':symbol,'rows':len(raw),'actual_start':str(idx[0]),'actual_end':str(idx[-1]),
+            'missing_minutes':int(missing),'coverage_pct':100*len(raw)/expected,'max_gap_minutes':max_gap,
+            'gap_count':len(intervals),'missing_intervals':intervals[:25],
+            'daily_backfill_days_attempted':int(raw.attrs.get('daily_backfill_days_attempted',0)),
+            'daily_backfill_days_loaded':int(raw.attrs.get('daily_backfill_days_loaded',0))}
 
 
 @njit(cache=True)
