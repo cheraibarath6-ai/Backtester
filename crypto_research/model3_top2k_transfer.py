@@ -168,17 +168,26 @@ def run_asset(symbol,out):
     m.to_csv(out/f'{symbol}_all_metrics.csv',index=False)
 
     tr=m[m.period=='TRAIN_2021_2023'].copy()
-    if symbol=='BTCUSDT':
-        selected=tr[tr.candidate_id.astype(str).isin(baseline_map)].copy()
-        selected['family']=selected.candidate_id.astype(str).map(baseline_map)
-        selected['selection_basis']='FROZEN_BTC_BASELINE_46'
-        if len(selected)!=46: raise RuntimeError(f'BTC frozen baseline replay mismatch: expected 46, got {len(selected)}')
-    else:
-        tr=tr[(tr.trades>=60)&(tr.profit_factor>=1)&(tr.net_bps>0)].copy()
-        tr['dev_score']=.6*tr.profit_factor+.1*np.log1p(tr.trades)+.2*np.clip(tr.net_bps/10000,-2,2)-.02*tr.max_drawdown_pct.abs()
-        selected=pd.concat([tr[tr.family==fam].sort_values(['dev_score','profit_factor','net_bps'],ascending=False).head(15)
-                             for fam in ('3A','3B','3C','3X')],ignore_index=True)
-        selected['selection_basis']='ASSET_TRAIN_2021_2023'
+    # Asset-specific selection: choose the two strongest individual parameter
+    # configurations from the full 1,853 pool, not two shared/common strategies.
+    # Development-only filter; later OOS periods remain untouched for evaluation.
+    eligible=tr[(tr.trades>=100)&(tr.profit_factor>=1.5)&(tr.net_bps>0)&(tr.max_drawdown_pct.abs()<=35)].copy()
+    eligible['selection_score']=(
+        0.55*np.log(np.maximum(eligible.profit_factor.astype(float),1e-9))+
+        0.15*np.log1p(eligible.trades.astype(float))+
+        0.20*np.clip(eligible.net_bps.astype(float)/10000,-2,2)-
+        0.10*(eligible.max_drawdown_pct.astype(float).abs()/100)
+    )
+    selected=eligible.sort_values(
+        ['selection_score','profit_factor','trades','net_bps'],
+        ascending=False
+    ).head(2).copy()
+    selected['selection_basis']='ASSET_SPECIFIC_TOP2_TRAIN_2021_2023'
+    selected['development_pf_target_met']=selected.profit_factor>=2.0
+    selected['selection_status']=np.where(
+        selected.profit_factor>=2.0,'DEVELOPMENT_PF_GE_2',
+        'SELECTED_BEST_AVAILABLE_BELOW_PF_2'
+    )
     selected.to_csv(out/f'{symbol}_selected_configs.csv',index=False)
     summary={'symbol':symbol,'candidate_configs':len(pool),'candidate_ids':pool.candidate_id.nunique(),
              'rows_per_period':per_period,'selected_development_configs':len(selected),
