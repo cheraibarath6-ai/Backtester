@@ -1,0 +1,126 @@
+name: Package BTC Model 3A 3B 3C Backtest and Exact Source
+
+on:
+  push:
+    branches: [research/model3-top2000-cross-asset]
+    paths: ['.github/workflows/package-btc-3abc.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact backtest source commit
+        uses: actions/checkout@v4
+        with:
+          ref: 192b8b9fefd74bcd382a728f538b85970d508ddf
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download BTC backtest results
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 43670077032
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          name: model3-top2k-asset-BTCUSDT
+          path: downloads/btc
+      - name: Download exact top-2000 candidate pool and BTC frozen configs
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 43670077032
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          name: model3-top2k-candidate-pool
+          path: downloads/pool
+      - name: Build clean BTC 3A 3B 3C result and source bundles
+        run: |
+          set -euo pipefail
+          mkdir -p package/BTC_3ABC_Backtest/results package/BTC_3ABC_Backtest/configs package/BTC_3ABC_Backtest/source/crypto_research
+          find downloads/btc -type f -name '*.zip' -print -quit | xargs -I{} unzip -q '{}' -d package/btc_raw
+          find downloads/pool -type f -name '*.zip' -print -quit | xargs -I{} unzip -q '{}' -d package/pool_raw
+          cp package/btc_raw/BTCUSDT_all_metrics.csv package/BTC_3ABC_Backtest/results/
+          cp package/btc_raw/BTCUSDT_summary.json package/BTC_3ABC_Backtest/results/
+          cp package/pool_raw/model3_btc_frozen_baseline_46.json package/BTC_3ABC_Backtest/configs/
+          cp package/pool_raw/model3_top2000_unique_candidate_pool.csv package/BTC_3ABC_Backtest/configs/
+          cp package/pool_raw/top2k_pool_manifest.json package/BTC_3ABC_Backtest/configs/
+          cp crypto_research/model3_top2k_transfer.py package/BTC_3ABC_Backtest/source/crypto_research/
+          cp crypto_research/sweep_m3_full_retracement.py package/BTC_3ABC_Backtest/source/crypto_research/
+          cp crypto_research/sweep_m3_strong_misjudge.py package/BTC_3ABC_Backtest/source/crypto_research/
+          cp crypto_research/data.py package/BTC_3ABC_Backtest/source/crypto_research/
+          cp crypto_research/prepare_model3_top2k_pool.py package/BTC_3ABC_Backtest/source/crypto_research/
+          cp crypto_research/__init__.py package/BTC_3ABC_Backtest/source/crypto_research/
+          cp requirements.txt package/BTC_3ABC_Backtest/source/
+          cat > package/BTC_3ABC_Backtest/README.md <<'EOF'
+          # BTC Model 3A / 3B / 3C — Backtest and Exact Source
+
+          Frozen original BTC baseline: 46 configurations (3A: 21, 3B: 8, 3C: 17).
+
+          Results include the full 1,853-candidate BTC replay and a filtered 46-configuration baseline CSV across all four periods. The parameter CSV lists every exact baseline setting. The family summary contains verified aggregates.
+
+          Periods: TRAIN_2021_2023, OOS_2024, OOS_2025, OOS_2026_YTD (through 2026-10-31).
+
+          Execution: Binance USD-M 1-minute candles, resampled to 5m/15m/30m/1h; official Binance Vision funding rates; 5 bps fee and 2 bps slippage per side; exact-price multi-candle retracement limit orders; stop-first same-candle ambiguity; timeframe-specific holding limits.
+
+          Family aggregates combine independent configurations. They are not portfolio returns and do not model shared capital or overlapping positions.
+
+          Reproduce with Python 3.11 and pip install -r source/requirements.txt. Copy configs into source/crypto_research/configs/ and run from repository root:
+          python -m crypto_research.model3_top2k_transfer --symbol BTCUSDT --out btc_replay
+
+          Exact source commit: 192b8b9fefd74bcd382a728f538b85970d508ddf (source run 43670077032).
+          EOF
+          cat > /tmp/build_btc_package.py <<'PY'
+          import json, pandas as pd
+          from pathlib import Path
+          p=Path("package/BTC_3ABC_Backtest")
+          m=pd.read_csv(p/"results/BTCUSDT_all_metrics.csv")
+          b=m[(m.symbol=="BTCUSDT") & (m.baseline_member==True)].copy()
+          if b.candidate_id.nunique()!=46 or len(b)!=46*4:
+              raise RuntimeError(f"Expected 46 baseline configs x 4 periods; got {b.candidate_id.nunique()} IDs and {len(b)} rows")
+          b.to_csv(p/"results/BTC_3ABC_BASELINE_ONLY.csv",index=False)
+          config=json.loads((p/"configs/model3_btc_frozen_baseline_46.json").read_text())
+          rows=[]
+          for fam,items in config.items():
+              for x in items: rows.append({"family":fam,**x})
+          params=pd.DataFrame(rows)
+          if len(params)!=46 or params.groupby("family").size().to_dict()!={"3A":21,"3B":8,"3C":17}:
+              raise RuntimeError("Frozen BTC config inventory mismatch")
+          params.to_csv(p/"results/BTC_3ABC_BASELINE_PARAMETERS.csv",index=False)
+          g=b.groupby(["baseline_family","period"],dropna=False).agg(
+              configurations=("candidate_id","nunique"),trades=("trades","sum"),wins=("wins","sum"),losses=("losses","sum"),
+              net_winning_bps=("net_winning_bps","sum"),net_losing_bps=("net_losing_bps","sum"),
+              net_bps=("net_bps","sum"),worst_config_drawdown_pct=("max_drawdown_pct","min"),
+              median_config_drawdown_pct=("max_drawdown_pct","median")).reset_index()
+          g["win_rate_pct"]=100*g.wins/g.trades
+          g["profit_factor"]=g.net_winning_bps/g.net_losing_bps
+          g.to_csv(p/"results/BTC_3ABC_FAMILY_SUMMARY.csv",index=False)
+          (p/"results/verification.json").write_text(json.dumps({
+              "source_run_id":43670077032,"source_commit":"192b8b9fefd74bcd382a728f538b85970d508ddf",
+              "baseline_configs":46,"families":{"3A":21,"3B":8,"3C":17},
+              "candidate_period_rows":len(b),"periods":sorted(b.period.unique().tolist()),
+              "fees_bps_per_side":5,"slippage_bps_per_side":2},indent=2))
+          PY
+          python /tmp/build_btc_package.py
+          cd package
+          zip -qr ../BTC_3ABC_Backtest_and_Exact_Source.zip BTC_3ABC_Backtest
+          cd ..
+          mkdir -p source_only
+          cp -r package/BTC_3ABC_Backtest/source source_only/
+          cp package/BTC_3ABC_Backtest/README.md source_only/
+          cd source_only
+          zip -qr ../BTC_3ABC_Exact_Scripts_and_Configs.zip .
+      - name: Upload BTC 3ABC complete bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: BTC-3ABC-Backtest-and-Exact-Source
+          path: BTC_3ABC_Backtest_and_Exact_Source.zip
+          retention-days: 90
+      - name: Upload BTC 3ABC source-only bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: BTC-3ABC-Exact-Scripts-and-Configs
+          path: BTC_3ABC_Exact_Scripts_and_Configs.zip
+          retention-days: 90
