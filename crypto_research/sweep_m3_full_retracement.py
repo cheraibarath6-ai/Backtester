@@ -13,7 +13,7 @@ import pandas as pd
 from .data import acquire_klines, acquire_funding, quality_report
 from .sweep_m3_strong_misjudge import prepare, wilder
 
-SYMBOLS=("BTCUSDT","ETHUSDT")
+SYMBOLS=("BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","DOGEUSDT","ADAUSDT","LINKUSDT","LTCUSDT","AVAXUSDT")
 TIMEFRAMES=("5m","15m","30m","1h")
 RETRACEMENTS=(.75,.786,.80,.82,.85)
 ATR_PERIODS=(14,20,25)
@@ -113,12 +113,19 @@ def run_limit_bt(d, funding, sig, retrace, rr, symbol, tf, model, sample_start, 
     return pd.DataFrame(trades,columns=cols)
 
 def summarize(t):
-    if t.empty: return dict(trades=0,win_rate_pct=0.,profit_factor=0.,net_bps=0.,avg_net_bps=0.,max_drawdown_pct=0.)
-    w=t.net_bps>0; gp=t.loc[w,"net_bps"].sum(); gl=-t.loc[~w,"net_bps"].sum()
-    eq=(1+t.net_bps/10000).cumprod(); dd=(eq/eq.cummax()-1).min()*100
-    return dict(trades=len(t),win_rate_pct=round(100*w.mean(),2),profit_factor=round(gp/gl,4) if gl>0 else None,
-                net_bps=round(t.net_bps.sum(),2),avg_net_bps=round(t.net_bps.mean(),3),max_drawdown_pct=round(dd,3),
-                avg_net_R=round(t.net_R.mean(),3))
+    if t.empty:
+        return dict(trades=0,wins=0,losses=0,win_rate_pct=0.,profit_factor=0.,net_bps=0.,
+                    net_winning_bps=0.,net_losing_bps=0.,avg_net_bps=0.,max_drawdown_pct=0.)
+    w=t.net_bps>0
+    gp=float(t.loc[w,"net_bps"].sum())
+    gl=float(-t.loc[t.net_bps<0,"net_bps"].sum())
+    eq=(1+t.net_bps/10000).cumprod()
+    dd=(eq/eq.cummax()-1).min()*100
+    return dict(trades=int(len(t)),wins=int(w.sum()),losses=int((t.net_bps<0).sum()),
+                win_rate_pct=round(100*w.mean(),2),profit_factor=round(gp/gl,6) if gl>0 else (float("inf") if gp>0 else 0.),
+                net_bps=round(float(t.net_bps.sum()),4),net_winning_bps=round(gp,4),
+                net_losing_bps=round(gl,4),avg_net_bps=round(float(t.net_bps.mean()),4),
+                max_drawdown_pct=round(float(dd),4),avg_net_R=round(float(t.net_R.mean()),4))
 
 def main():
     out=Path("artifacts/model3_full_retracement"); out.mkdir(parents=True,exist_ok=True)
@@ -175,7 +182,9 @@ def main():
     manifest={"status":"completed","symbols":list(SYMBOLS),"timeframes":list(TIMEFRAMES),
       "atr_periods":list(ATR_PERIODS),"impulse_atr":list(IMPULSE_ATR),"adx_bands":[list(x) for x in ADX_BANDS],
       "rsi_modes":list(RSI_MODES),"retracements":list(RETRACEMENTS),"rr":list(RRS),"pending_bars":list(PENDING_BARS),
-      "configurations":len(configs),"asset_configurations":len(configs)*len(SYMBOLS),
+      "base_parameter_sets":len(configs),"asset_base_parameter_sets":len(configs)*len(SYMBOLS),
+      "candidate_configurations_per_asset":len(configs)*len(RRS)*len(PENDING_BARS),
+      "total_asset_specific_candidate_configurations":len(configs)*len(RRS)*len(PENDING_BARS)*len(SYMBOLS),
       "periods":[x[0] for x in CUTS],"fee_bps_per_side":FEE,"slippage_bps_per_side":SLIP,
       "pending_valid_bars":list(PENDING_BARS),"entry_rule":"exact retracement price; touch on any subsequent bar; no confirmation candle",
       "funding":"official Binance Vision fundingRate archives"}
