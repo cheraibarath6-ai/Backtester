@@ -1,0 +1,126 @@
+name: Model 3 Full-Universe Asset-Specific Search
+
+on:
+  push:
+    branches: [research/model3-full-universe-10-assets]
+    paths:
+      - '.github/workflows/model3-full-universe-10-assets.yml'
+      - 'crypto_research/sweep_m3_full_retracement.py'
+      - 'crypto_research/run_model3_shard.py'
+      - 'crypto_research/prepare_model3_data.py'
+      - 'crypto_research/aggregate_model3_shards.py'
+      - 'crypto_research/data.py'
+      - 'requirements.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: model3-full-universe-asset-specific
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Restore or create complete ten-asset Binance data cache
+        uses: actions/cache@v4
+        with:
+          path: data/raw
+          key: model3-binance-um-2021-2026-full10-v1-${{ runner.os }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Download and validate official Binance candles and funding for all ten assets
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: python -u -m crypto_research.prepare_model3_data
+      - name: Upload data quality manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: model3-full10-data-quality
+          path: artifacts/preflight/data_quality.json
+          retention-days: 90
+
+  research:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        symbol: [BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT, XRPUSDT, DOGEUSDT, ADAUSDT, LINKUSDT, LTCUSDT, AVAXUSDT]
+        shard: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Restore validated ten-asset Binance data cache
+        uses: actions/cache@v4
+        with:
+          path: data/raw
+          key: model3-binance-um-2021-2026-full10-v1-${{ runner.os }}
+          fail-on-cache-miss: true
+      - name: Install dependencies
+        run: pip install -r requirements.txt numba
+      - name: Compile research code
+        run: python -m compileall -q crypto_research
+      - name: Replay complete parameter grid for this asset shard
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: python -u -m crypto_research.run_model3_shard --symbol '${{ matrix.symbol }}' --shard-index ${{ matrix.shard }} --shard-count 25
+      - name: Upload verified metrics shard
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model3-full-shard-${{ matrix.symbol }}-${{ matrix.shard }}
+          path: artifacts/shards/
+          if-no-files-found: error
+          retention-days: 90
+
+  aggregate:
+    needs: [prepare, research]
+    if: success()
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Download all 250 verified metric shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: model3-full-shard-*
+          path: artifacts/shards
+          merge-multiple: false
+      - name: Download ten-asset data quality report
+        uses: actions/download-artifact@v4
+        with:
+          name: model3-full10-data-quality
+          path: artifacts/preflight
+      - name: Verify complete matrix and rank top two independently per asset
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: python -u -m crypto_research.aggregate_model3_shards
+      - name: Upload full-universe final report
+        uses: actions/upload-artifact@v4
+        with:
+          name: model3-full-universe-asset-specific-final-report
+          path: artifacts/model3_full_universe_asset_specific/
+          if-no-files-found: error
+          retention-days: 90
