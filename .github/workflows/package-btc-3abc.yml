@@ -40,13 +40,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p package/BTC_3ABC_Backtest/results package/BTC_3ABC_Backtest/configs package/BTC_3ABC_Backtest/source/crypto_research
-          find downloads/btc -type f -name '*.zip' -print -quit | xargs -I{} unzip -q '{}' -d package/btc_raw
-          find downloads/pool -type f -name '*.zip' -print -quit | xargs -I{} unzip -q '{}' -d package/pool_raw
-          cp package/btc_raw/BTCUSDT_all_metrics.csv package/BTC_3ABC_Backtest/results/
-          cp package/btc_raw/BTCUSDT_summary.json package/BTC_3ABC_Backtest/results/
-          cp package/pool_raw/model3_btc_frozen_baseline_46.json package/BTC_3ABC_Backtest/configs/
-          cp package/pool_raw/model3_top2000_unique_candidate_pool.csv package/BTC_3ABC_Backtest/configs/
-          cp package/pool_raw/top2k_pool_manifest.json package/BTC_3ABC_Backtest/configs/
+          cp downloads/btc/BTCUSDT_all_metrics.csv package/BTC_3ABC_Backtest/results/
+          cp downloads/btc/BTCUSDT_summary.json package/BTC_3ABC_Backtest/results/
+          cp downloads/pool/model3_btc_frozen_baseline_46.json package/BTC_3ABC_Backtest/configs/
+          cp downloads/pool/model3_top2000_unique_candidate_pool.csv package/BTC_3ABC_Backtest/configs/
+          cp downloads/pool/top2k_pool_manifest.json package/BTC_3ABC_Backtest/configs/
           cp crypto_research/model3_top2k_transfer.py package/BTC_3ABC_Backtest/source/crypto_research/
           cp crypto_research/sweep_m3_full_retracement.py package/BTC_3ABC_Backtest/source/crypto_research/
           cp crypto_research/sweep_m3_strong_misjudge.py package/BTC_3ABC_Backtest/source/crypto_research/
