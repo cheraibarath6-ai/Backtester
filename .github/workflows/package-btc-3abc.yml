@@ -1,0 +1,40 @@
+name: Package BTC Model 3ABC Results and Exact Code
+
+on:
+  push:
+    branches: [research/btc-3abc-delivery-bundle]
+    paths:
+      - '.github/workflows/package-btc-3abc.yml'
+      - 'crypto_research/package_btc_3abc.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install report dependencies
+        run: pip install pandas numpy
+      - name: Download exact completed backtest result artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p inputs/report inputs/pool
+          gh run download 43670077032 --repo cheraibarath6-ai/Backtester --name model3-top2k-ten-asset-final-report --dir inputs/report
+          gh run download 43670077032 --repo cheraibarath6-ai/Backtester --name model3-top2k-candidate-pool --dir inputs/pool
+      - name: Package BTC 3A 3B 3C metrics, frozen configurations and exact source code
+        run: python -m crypto_research.package_btc_3abc
+      - name: Upload downloadable ZIP bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: BTC-Model-3ABC-Results-and-Exact-Code
+          path: dist/BTC_Model_3ABC_Backtested_Results_and_Exact_Code.zip
+          if-no-files-found: error
+          retention-days: 90
