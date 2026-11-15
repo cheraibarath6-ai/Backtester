@@ -10,12 +10,9 @@ BUNDLE=OUT/"BTC_Model_3ABC_Backtested_Results_and_Exact_Code.zip"
 
 def main():
     OUT.mkdir(exist_ok=True)
-    report_zip=next(REPORT.glob("*.zip"))
-    pool_zip=next(POOL.glob("*.zip"))
-    with zipfile.ZipFile(report_zip) as z: z.extractall(REPORT/"extracted")
-    with zipfile.ZipFile(pool_zip) as z: z.extractall(POOL/"extracted")
-    rd=REPORT/"extracted"
-    pdx=POOL/"extracted"
+    # gh run download extracts artifact contents directly into these folders.
+    rd=REPORT
+    pdx=POOL
     config_path=rd/"ASSET_ORIENTED_MODEL3_CONFIGS.json"
     configs=json.loads(config_path.read_text())
     baseline=configs["btc_frozen_baseline_46"]
